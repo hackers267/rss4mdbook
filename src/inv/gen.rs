@@ -1,213 +1,167 @@
 #![allow(unused)]
-//use std::error::Error;
 use std::fs;
 use std::fs::File;
-//use std::io::prelude::*;
-//use std::io::Cursor;
-//use std::io;
 use std::io::Read;
 use std::io::Write;
-//use std::io::BufWriter;
-//use std::collections::BTreeMap;
-//use std::cmp::Reverse;
+use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
-use std::path::Component;
-//use std::time::SystemTime;
 
+use chrono::prelude::*;
+use chrono::DateTime;
 use rss::Channel;
 use rss::Item;
-use chrono::prelude::*;
-//use chrono::Utc;
-use chrono::DateTime;
-//use chrono::NaiveDateTime;
-//use chrono::NaiveDate;
-use walkdir::{DirEntry as WalkDirEntry, WalkDir};
-//use walkdir::{DirEntry as WalkDirEntry, WalkDir};
-//use walkdir::WalkDir;
 use toml::Value;
+use walkdir::{DirEntry as WalkDirEntry, WalkDir};
 
 use crate::inv::util;
 
 /* CLI for gen. RSS from mdBook
-- walk the src path
-- check all .md file's update date
-- order pick lated 5
-- export as rss.xml -> u want path
-/Users/zoomq/Exercism/proj/rss4mdbook/target/debug
+    - walk the src path
+    - check all .md file's update date
+    - order pick lated 5
+    - export as rss.xml -> u want path
 */
-pub fn exp(book:String) {
-    //println!("src/inv/gen: {}", env!("CARGO_PKG_VERSION"));
+pub fn exp(book: String) {
     let pkg_name = option_env!("CARGO_PKG_NAME").unwrap_or("DAMA's Crate");
     let pkg_version = option_env!("CARGO_PKG_VERSION").unwrap_or("0.1.42");
-    //println!("CARGO_PKG_NAME: {}",pkg_name);
-    //println!("CARGO_PKG_VERSION: {}",pkg_version);
-    println!("digging and generating by\n\t~> {} v{} <~",pkg_name,pkg_version);
-    //log::debug!("src/inv/gen: as {}", env!("CARGO_PKG_VERSION"));
-// check .env is OK?
-//    match util::chk_denv(util::ENV_BOOK) {
-//        util::EnvResult::Success(_ekey, _p2docs) => {
-            println!("let's make RSS now...");
-            //log::debug!(".env:\n {}={}",_ekey, _p2docs);
-    let _p2docs = book;
-// try read ENV_BOOK
-    match read_file(&_p2docs) {
+    println!(
+        "digging and generating by\n\t~> {} v{} <~",
+        pkg_name, pkg_version
+    );
+    println!("let's make RSS now...");
+    match read_file(&book) {
         Ok(contents) => {
-// got path from book.toml
-        let toml_value = contents.parse::<Value>().unwrap();
-        let src = toml_value["book"]["src"].as_str().unwrap();
-        let build_dir = toml_value["build"]["build-dir"].as_str().unwrap();
-        //let rss_url_base = toml_value["rss4mdbook"]["url-base"].as_str().unwrap();
+            let toml_value = contents.parse::<Value>().unwrap();
+            let src = toml_value["book"]["src"].as_str().unwrap_or("src");
+            let build_dir = toml_value["build"]["build-dir"].as_str().unwrap_or("book");
+            match toml_value
+                .get("rss4mdbook")
+                .and_then(|v| v.get("url-base").and_then(Value::as_str))
+            {
+                Some(rss_url_base) => {
+                    // url-base 存在，并且是字符串类型
+                    println!("Found url-base: {}", rss_url_base);
 
-match toml_value.get("rss4mdbook").and_then(|v| v.get("url_base").and_then(Value::as_str)) {
-    Some(rss_url_base) => {
-        // url-base 存在，并且是字符串类型
-        println!("Found url-base: {}", rss_url_base.clone());
-
-let rss_title = toml_value["rss4mdbook"]["rss_title"]
-        .as_str()
-        .unwrap_or("RSS TITLE not define in book.toml");
-let rss_desc = toml_value["rss4mdbook"]["rss_desc"]
-        .as_str()
-        .unwrap_or("RSS DESCRIPTION not define in book.toml");
-
-//rss_title
-//rss_desc
-        if let Some(directory_str) = get_directory(&_p2docs) {
-            let src2md = format!("{}/{}",directory_str,src);
-            let expath = format!("{}/{}",directory_str,build_dir);
-            let exprss = format!("{}/RSS.xml",expath);
-
-            //log::debug!("\n rss url base: {}", rss_url_base);
-            //log::debug!("\n src2md: {}\n expath: {}"
-            //    , src2md
-            //    , expath);
-// walk dir for top5 lasted .md
-            let latest5files = scan_dir(src2md.clone(), 4);
-            //println!("lasted5top:{:?}",mds);
-            println!("will export these article into RSS.xml");
-            for md in latest5files.clone() {
-                println!("\t{}",md);
-            }
-        match rss4top5md((&rss_url_base).to_string()
-                    , exprss.clone()
-                    , src2md.clone()
-                    , (&rss_title).to_string()
-                    , (&rss_desc).to_string()
-                    , latest5files){
-                Ok(_) => println!("\n Export => {}\n\n",exprss.clone()),
-                Err(e) =>println!("Error: {}", e)
+                    let rss_title = toml_value
+                        .get("rss4mdbook")
+                        .and_then(|v| v.get("rss_title"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("RSS TITLE not define in book.toml");
+                    let rss_desc = toml_value
+                        .get("rss4mdbook")
+                        .and_then(|v| v.get("rss_desc"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("RSS TITLE not define in book.toml");
+                    let book_path = Path::new(&book);
+                    let src_path = book_path
+                        .parent()
+                        .map(|path| path.join(src))
+                        .and_then(|path| path.to_str().map(|v| v.to_string()));
+                    let export_path = book_path
+                        .parent()
+                        .map(|path| path.join(build_dir))
+                        .and_then(|path| path.to_str().map(|v| v.to_string()));
+                    let export_rss_path = book_path
+                        .parent()
+                        .map(|path| path.join("book/RSS.xml"))
+                        .and_then(|path| path.to_str().map(|v| v.to_string()));
+                    if let (Some(src2md), Some(expath), Some(exprss)) =
+                        (src_path, export_path, export_rss_path)
+                    {
+                        let latest5files = scan_dir(src2md.clone(), 4);
+                        println!("will export these article into RSS.xml");
+                        match rss4top5md(
+                            (&rss_url_base).to_string(),
+                            exprss.clone(),
+                            src2md.clone(),
+                            (&rss_title).to_string(),
+                            (&rss_desc).to_string(),
+                            latest5files,
+                        ) {
+                            Ok(_) => println!("\n Export => {}\n\n", exprss.clone()),
+                            Err(e) => println!("Error: {}", e),
+                        }
+                    }
                 }
-            }//get_directory(&_p2docs)
-
-    },
-    None => {
-        // url-base 不存在或不是字符串类型
-        println!(r#"Warning: 
+                None => {
+                    // url-base 不存在或不是字符串类型
+                    println!(
+                        r#"Warning: 
 [rss4mdbook] not config in mdBook's book.toml, please append such as:
 
     [rss4mdbook]
     url-base = "https://rs.101.so" # u site's root URL
-    "#);
-        std::process::exit(1);
-    }
-} //toml_value.get("rss4mdbook").and_then
-
-        }, Err(e) => println!("Error: {}", e)
-    }// match read_file(&_p2docs)
-
-//        },util::EnvResult::Failure(e) => println!("failed: {}", e),
-//    }//match util::chk_denv(util::ENV_BOOK)
-//    Ok(())
-}
-
-
-//fn scan_dir(src2md: String) {
-fn scan_dir(src2md: String, topn:usize) -> Vec<String> {
-    let walker = WalkDir::new(src2md).into_iter();
-    //let mut file_modified_times = Vec::new();
-/* 
-    for entry in walker.filter_entry(|e| !is_hidden(e)) {
-        let entry = entry.unwrap();
-        if let Some(extension) = entry.path().extension() {
-            if extension == "md" {
-                if let Ok(metadata) = fs::metadata(entry.path()) {
-                    if let Ok(modified_time) = metadata.modified() {
-                        file_modified_times.push((entry.path().to_owned(), modified_time));
-                    }
+    "#
+                    );
+                    std::process::exit(1);
                 }
             }
         }
+        Err(e) => println!("Error: {}", e),
     }
- */
+}
+
+fn scan_dir(src2md: String, topn: usize) -> Vec<String> {
+    let walker = WalkDir::new(src2md).into_iter();
     let mut file_modified_times = walker
-        .filter_map(Result::ok)     // only got Ok
-        .map(|e| e.into()) // for e as walkdir::DirEntry
+        .filter_map(Result::ok)
         .filter(|e| !is_hidden(e))
-        .filter(
-            |e| e.path().extension().map_or(false
-                                                , |ext| ext == "md"))
+        .filter(|e| e.path().extension().map_or(false, |ext| ext == "md"))
         .filter_map(|e| {
             fs::metadata(e.path())
                 .ok()
-                .and_then(
-                    |m| m.modified().ok().map(
-                            |t| (e.path().to_owned(), t)
-                        )
-                    )
+                .and_then(|m| m.modified().ok().map(|t| (e.path().to_owned(), t)))
         })
         .collect::<Vec<_>>();
 
     // 排序
-    file_modified_times.sort_by_key(|(_, time)| time.clone());
+    file_modified_times.sort_by_key(|(_, time)| *time);
 
     // 获取最新的5个文件，过滤掉包含 SUMMARY.md 的路径
     let newest_files: Vec<String> = file_modified_times
         .iter()
         .rev()
         .filter(|(path, _)| !path.to_string_lossy().contains("SUMMARY.md"))
-        .take(topn)//.take(5)
+        .take(topn) //.take(5)
         .map(|(path, _)| path.to_string_lossy().to_string())
         .collect();
-//  return the lasted5md
     newest_files
-
 }
 
-
-fn rss4top5md(uri:String
-    , rssfile:String
-    , src2md:String
-    , rss_title:String
-    , rss_desc:String
-    , latest5files: Vec<String>) -> Result<(), Box<dyn std::error::Error>>{
+fn rss4top5md(
+    uri: String,
+    rssfile: String,
+    src2md: String,
+    rss_title: String,
+    rss_desc: String,
+    latest5files: Vec<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
     // 创建一个 RSS channel
-    let mut channel = Channel::default();
-    // 设置 channel 的元数据
-    channel.link = uri.clone();//"https://example.com".to_owned();
-    channel.title = rss_title;//util::RSS_TITLE.to_string();//"My RSS feed".to_owned();
-    channel.description = rss_desc;//util::RSS_DESC.to_string();//"This is my RSS feed".to_owned();
-    channel.generator = Some("my_rss_generator".to_owned());
+    let mut channel = Channel {
+        link: uri.clone(),
+        title: rss_title,
+        description: rss_desc,
+        generator: Some("my_rss_generator".to_owned()),
+        ..Default::default()
+    };
 
     // 为每个文件创建 RSS item
     for file in latest5files {
         let _p4src = site_uri(file.clone(), &src2md);
-        //log::debug!("\n_p4src:{}",_p4src);
-        let _uri4md = &_p4src[.._p4src.len()-3];
-        //log::debug!("_uri4md:{}",_uri4md);
-        //println!("_uri4md: {}/{}",uri.clone(), _uri4md);
-
+        let _uri4md = &_p4src[.._p4src.len() - 3];
         let metadata = fs::metadata(&file)?;
-        let date = DateTime::<Local>::from(metadata.modified()?)
-            .to_rfc2822();
+        let date = DateTime::<Local>::from(metadata.modified()?).to_rfc2822();
         let content = fs::read_to_string(&file)?;
         let file_path = PathBuf::from(&file);
-        let file_name = file_path.file_name().unwrap().to_string_lossy().into_owned();
-        
+        let file_name = file_path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
         let item = Item {
             title: Some(file_name),
-            //link: None,
-            link: Some(format!("{}/{}",uri.clone(), _uri4md)),
+            link: Some(format!("{}/{}", uri.clone(), _uri4md)),
             description: None,
             author: None,
             categories: vec![],
@@ -216,72 +170,41 @@ fn rss4top5md(uri:String
             guid: None,
             pub_date: Some(date),
             source: None,
-            content: Some(content.into()),
+            content: Some(content),
             ..Default::default()
         };
         channel.items.push(item);
     }
     // Write the RSS XML to the output file
     let mut output_file = File::create(rssfile)?;
-    output_file.write_fmt(format_args!("{}", channel.to_string()))?;
+    output_file.write_fmt(format_args!("{}", channel))?;
 
     Ok(())
 }
 
-
-//use std::path::{Path, Component};
 fn site_uri(path: String, base: &str) -> String {
-    log::debug!("\n {} ~ {}",path, base);
-/* 
+    log::debug!("\n {} ~ {}", path, base);
     let parent_iter = Path::new(&path)
         .ancestors()
-        .skip_while(|p| p != &Path::new(base))
-        .next()
-        .and_then(|p| p.strip_prefix(base))
-        .and_then(|p| p.components().next())
-        .map(|p| p.as_os_str())
-        .and_then(|p| p.to_str())
-        .map(|p| p.to_owned());
-
-    if let Some(parent) = parent_iter {
-        let mut uri = String::new();
-        uri.push_str(&parent);
-        uri
-    } else {
-        String::new()
-    }
- */    
-    let parent_iter = Path::new(&path)
-        .ancestors()
-        //.skip_while(|p| p != &Path::new(base))
         .next()
         .unwrap()
         .strip_prefix(base)
         .unwrap()
         .components()
         .rev();
-
-//log::debug!("\n {:?}",parent_iter.clone());
-
     let mut uri = String::new();
     for component in parent_iter {
-        match component {
-            Component::Normal(normal) => {
-                uri.insert_str(0, normal.to_str().unwrap());
-                uri.insert(0, '/');
-//log::debug!("~ {}",uri.clone());
-            },
-            _ => {}
+        if let Component::Normal(normal) = component {
+            uri.insert_str(0, normal.to_str().unwrap());
+            uri.insert(0, '/');
         }
     }
-    uri 
-
-
+    uri
 }
 
-
 fn is_hidden(entry: &WalkDirEntry) -> bool {
-    entry.file_name()
+    entry
+        .file_name()
         .to_str()
         .map(|s| s.starts_with("."))
         .unwrap_or(false)
@@ -289,10 +212,8 @@ fn is_hidden(entry: &WalkDirEntry) -> bool {
 
 fn get_directory(path_str: &str) -> Option<String> {
     let path = Path::new(path_str);
-    match path.parent() {
-        Some(parent) => Some(parent.to_str().unwrap().to_owned()),
-        None => None,
-    }
+    path.parent()
+        .map(|parent| parent.to_str().unwrap().to_owned())
 }
 
 fn read_file(filename: &str) -> Result<String, std::io::Error> {
@@ -306,5 +227,3 @@ fn read_file(filename: &str) -> Result<String, std::io::Error> {
         Err(e) => Err(e),
     }
 }
-
-

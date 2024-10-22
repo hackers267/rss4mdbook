@@ -14,7 +14,10 @@ pub mod gen;
 //    , about = "A brief description of your tool"
 //    , author = "Your Name")]
 #[derive(Debug, Parser)]
-#[command(author, version, about, 
+#[command(
+    author,
+    version,
+    about,
     long_about = r#"RSS4mdBook Usage:
 - 0: config mdBook's book.toml, append such as:
 
@@ -24,7 +27,8 @@ pub mod gen;
 - 1: mdbook build
 - 2: use `gen` command, append the lasted 4 articles as rss.xml 
     $ rss4mdbook gen path/2/u/mdbook/book.toml
-    "#)] // Read from `Cargo.toml`
+    "#
+)] // Read from `Cargo.toml`
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -32,17 +36,17 @@ pub struct Cli {
 
 #[derive(Debug, clap::Parser)]
 pub enum Commands {
-/* 
-    #[command(about = "book /path/2/u/loc./mdbook/book.toml ~ set loc. writing path...")]
-    #[command(arg_required_else_help = false)]
-    Cfg {
-        #[arg(value_name = "BOOK")]
-        book: String,
-        #[arg(value_name = "PATH")]
-        path: String,
-    },
+    /*
+       #[command(about = "book /path/2/u/loc./mdbook/book.toml ~ set loc. writing path...")]
+       #[command(arg_required_else_help = false)]
+       Cfg {
+           #[arg(value_name = "BOOK")]
+           book: String,
+           #[arg(value_name = "PATH")]
+           path: String,
+       },
 
- */
+    */
     #[command(about = "/path/2/u/loc./mdbook/book.toml ~ NEED absolutely path")]
     #[command(arg_required_else_help = false)]
     Gen {
@@ -70,14 +74,7 @@ pub fn run() {
     //log::debug!("src/inv/mod:{:?}", args);
 
     match args.command {
-    // name.path
-        //Commands::Cfg {
-        //    book, path }=> cfg::set(book, path),
-    // not need arg.
-        Commands::Gen {
-            book} => gen::exp(book),
-
-    // others
+        Commands::Gen { book } => gen::exp(book),
         Commands::External(args) => {
             println!("Calling out to {:?} with {:?}", &args[0], &args[1..]);
         }
