@@ -35,6 +35,7 @@ pub fn exp(book: String) {
             let toml_value = contents.parse::<Value>().unwrap();
             let src = pick_src(&toml_value);
             let output = pick_field(&toml_value, "build", "build-dir").unwrap_or("book");
+            let author = pick_author(&toml_value).unwrap_or("unknown");
             match rss_base_url(&toml_value) {
                 Some(rss_url_base) => {
                     // url-base 存在，并且是字符串类型
@@ -49,7 +50,7 @@ pub fn exp(book: String) {
                     {
                         let latest5files = scan_dir(&source_path, 4);
                         println!("will export these article into RSS.xml");
-                        let rss_config = RssConfig::new(rss_title, rss_desc, rss_url_base);
+                        let rss_config = RssConfig::new(rss_title, rss_desc, rss_url_base, author);
                         match rss4top5md(
                             &exp_rss_path,
                             &source_path,
@@ -78,6 +79,15 @@ pub fn exp(book: String) {
         }
         Err(e) => println!("Error: {}", e),
     }
+}
+
+fn pick_author(toml_value: &Value) -> Option<&str> {
+    toml_value
+        .get("book")
+        .and_then(|v| v.get("authors"))
+        .and_then(|v| v.as_array())
+        .and_then(|array| array.first())
+        .and_then(|v| v.as_str())
 }
 
 /// 获取rss输出地址
@@ -145,11 +155,17 @@ struct RssConfig<'a> {
     title: &'a str,
     desc: &'a str,
     url: &'a str,
+    author: &'a str,
 }
 
 impl<'a> RssConfig<'a> {
-    pub fn new(title: &'a str, desc: &'a str, url: &'a str) -> Self {
-        Self { title, desc, url }
+    pub fn new(title: &'a str, desc: &'a str, url: &'a str, author: &'a str) -> Self {
+        Self {
+            title,
+            desc,
+            url,
+            author,
+        }
     }
 }
 
@@ -169,13 +185,15 @@ fn rss4top5md(
         title: title.to_string(),
         description: desc.to_string(),
         generator: Some("my_rss_generator".to_owned()),
+        language: Some("chinese".to_string()),
         ..Default::default()
     };
+    let author = rss_config.author;
 
     // 为每个文件创建 RSS item
     for file in latest5files {
-        let _p4src = site_uri(file, source);
-        let _uri4md = &_p4src[.._p4src.len() - 3];
+        let uri = site_uri(file, source);
+        let uri4md = &uri[..uri.len() - 3];
         let metadata = fs::metadata(file)?;
         let date = DateTime::<Local>::from(metadata.modified()?).to_rfc2822();
         let file_path = PathBuf::from(&file);
@@ -187,9 +205,9 @@ fn rss4top5md(
             .into_owned();
         let item = Item {
             title: Some(file_name),
-            link: Some(format!("{}/{}", uri, _uri4md)),
+            link: Some(format!("{}{}", uri, uri4md)),
             description: None,
-            author: None,
+            author: Some(author.to_string()),
             categories: vec![],
             comments: None,
             enclosure: None,
