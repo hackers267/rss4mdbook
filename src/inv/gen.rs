@@ -112,7 +112,7 @@ fn pick_rss_desc(toml_value: &Value) -> &str {
 
 /// 提取RSS标题
 fn pick_rss_title(toml_value: &Value) -> &str {
-    pick_field(toml_value, "rss4mdbook", "rss_desc").unwrap_or("Thanks Subscribe")
+    pick_field(toml_value, "rss4mdbook", "rss_title").unwrap_or("Thanks Subscribe")
 }
 
 /// 提取rss输出中的base-url字段
