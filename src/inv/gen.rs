@@ -9,7 +9,6 @@ use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
-use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 use toml::Value;
@@ -193,7 +192,6 @@ fn rss4top5md(
     // 为每个文件创建 RSS item
     for file in latest5files {
         let uri = site_uri(file, source);
-        let uri4md = &uri[..uri.len() - 3];
         let metadata = fs::metadata(file)?;
         let date = DateTime::<Local>::from(metadata.modified()?).to_rfc2822();
         let file_path = PathBuf::from(&file);
@@ -203,9 +201,10 @@ fn rss4top5md(
             .unwrap()
             .to_string_lossy()
             .into_owned();
+        println!("uri and uri4md is {:?}", uri);
         let item = Item {
             title: Some(file_name),
-            link: Some(format!("{}{}", uri, uri4md)),
+            link: Some(uri),
             description: None,
             author: Some(author.to_string()),
             categories: vec![],
@@ -222,7 +221,6 @@ fn rss4top5md(
     // Write the RSS XML to the output file
     let mut output_file = File::create(rssfile)?;
     output_file.write_fmt(format_args!("{}", channel))?;
-
     Ok(())
 }
 
@@ -246,23 +244,12 @@ fn pick_content(file: &Path, source: &Path, output: &Path) -> Result<String, Box
     Ok(main)
 }
 
-fn site_uri(path: &Path, base: &Path) -> String {
-    let parent_iter = path
-        .ancestors()
-        .next()
-        .unwrap()
-        .strip_prefix(base)
-        .unwrap()
-        .components()
-        .rev();
-    let mut uri = String::new();
-    for component in parent_iter {
-        if let Component::Normal(normal) = component {
-            uri.insert_str(0, normal.to_str().unwrap());
-            uri.insert(0, '/');
-        }
-    }
-    uri
+fn site_uri<'a>(path: &'a Path, base: &'a Path) -> String {
+    let uri = path.strip_prefix(base).expect("提取条目的uri失败");
+    uri.with_extension("")
+        .to_str()
+        .map(|v| v.to_string())
+        .expect("提取uri条目失败")
 }
 
 fn is_hidden(entry: &WalkDirEntry) -> bool {
