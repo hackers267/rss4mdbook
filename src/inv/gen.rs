@@ -1,5 +1,5 @@
 use super::util::pick_field;
-use chrono::{prelude::*, DateTime};
+use chrono::{DateTime, Local};
 use log::{error, info, warn};
 use rss::{Channel, Item};
 use scraper::{Html, Selector};
@@ -18,7 +18,7 @@ use walkdir::{DirEntry as WalkDirEntry, WalkDir};
     - order pick lated 5
     - export as rss.xml -> u want path
 */
-pub fn exp(book: String, limit: Option<usize>, _day: Option<usize>) {
+pub fn exp(book: String, limit: Option<usize>, day: Option<usize>) {
     let pkg_name = option_env!("CARGO_PKG_NAME").unwrap_or("DAMA's Crate");
     let pkg_version = option_env!("CARGO_PKG_VERSION").unwrap_or("0.1.42");
     let top = limit.unwrap_or(5);
@@ -46,7 +46,7 @@ pub fn exp(book: String, limit: Option<usize>, _day: Option<usize>) {
                     if let (Some(source_path), Some(exp_rss_path), Some(output_path)) =
                         (src_path, export_rss_path, output_path)
                     {
-                        let latest_files = scan_dir(&source_path, top);
+                        let latest_files = scan_dir(&source_path, top, day);
                         info!("Will export these article into RSS.xml");
                         latest_files
                             .iter()
@@ -126,7 +126,7 @@ fn pick_src(toml_value: &Value) -> &str {
     pick_field(toml_value, "book", "src").unwrap_or("src")
 }
 
-fn scan_dir(source: &Path, top_n: usize) -> Vec<PathBuf> {
+fn scan_dir(source: &Path, top_n: usize, day: Option<usize>) -> Vec<PathBuf> {
     let walker = WalkDir::new(source).into_iter();
     let mut file_modified_times = walker
         .filter_map(Result::ok)
@@ -142,14 +142,35 @@ fn scan_dir(source: &Path, top_n: usize) -> Vec<PathBuf> {
     // 排序
     file_modified_times.sort_by_key(|(_, time)| *time);
 
-    // 获取最新的n个文件，过滤掉包含 SUMMARY.md 的路径
-    file_modified_times
-        .iter()
-        .rev()
-        .filter(|(path, _)| !path.to_string_lossy().contains("SUMMARY.md"))
-        .take(top_n)
-        .map(|(path, _)| path.to_path_buf())
-        .collect()
+    match day {
+        Some(day) => file_modified_times
+            .iter()
+            .rev()
+            .filter(|(path, _)| {
+                !path
+                    .to_str()
+                    .is_some_and(|v| v.to_lowercase().contains("summary.md"))
+            })
+            .filter(|(_, time)| {
+                let modified_time: DateTime<Local> = DateTime::from(*time);
+                let now = Local::now();
+                let duration = now - modified_time;
+                let days = duration.num_days() as usize;
+                days < day
+            })
+            .map(|(path, _)| path.to_path_buf())
+            .collect(),
+        None => {
+            // 获取最新的n个文件，过滤掉包含 SUMMARY.md 的路径
+            file_modified_times
+                .iter()
+                .rev()
+                .filter(|(path, _)| !path.to_string_lossy().contains("SUMMARY.md"))
+                .take(top_n)
+                .map(|(path, _)| path.to_path_buf())
+                .collect()
+        }
+    }
 }
 
 struct RssConfig<'a> {
