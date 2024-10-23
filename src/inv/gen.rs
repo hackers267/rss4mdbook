@@ -1,16 +1,14 @@
 use super::util::pick_field;
-use chrono::prelude::*;
-use chrono::DateTime;
-use rss::Channel;
-use rss::Item;
+use chrono::{prelude::*, DateTime};
+use log::{error, info, warn};
+use rss::{Channel, Item};
 use scraper::{Html, Selector};
-use std::error::Error;
-use std::fs;
-use std::fs::File;
-use std::io::Read;
-use std::io::Write;
-use std::path::Path;
-use std::path::PathBuf;
+use std::{
+    error::Error,
+    fs::{self, File},
+    io::{Read, Write},
+    path::{Path, PathBuf},
+};
 use toml::Value;
 use walkdir::{DirEntry as WalkDirEntry, WalkDir};
 
@@ -23,11 +21,11 @@ use walkdir::{DirEntry as WalkDirEntry, WalkDir};
 pub fn exp(book: String) {
     let pkg_name = option_env!("CARGO_PKG_NAME").unwrap_or("DAMA's Crate");
     let pkg_version = option_env!("CARGO_PKG_VERSION").unwrap_or("0.1.42");
-    println!(
+    info!(
         "digging and generating by\n\t~> {} v{} <~",
         pkg_name, pkg_version
     );
-    println!("let's make RSS now...");
+    info!("let's make RSS now...");
     let book_path = Path::new(&book);
     match read_file(book_path) {
         Ok(contents) => {
@@ -38,7 +36,7 @@ pub fn exp(book: String) {
             match rss_base_url(&toml_value) {
                 Some(rss_url_base) => {
                     // url-base 存在，并且是字符串类型
-                    println!("Found url-base: {}", rss_url_base);
+                    info!("Found url-base: {}", rss_url_base);
                     let rss_title = pick_rss_title(&toml_value);
                     let rss_desc = pick_rss_desc(&toml_value);
                     let src_path = source_path(book_path, src);
@@ -48,7 +46,7 @@ pub fn exp(book: String) {
                         (src_path, export_rss_path, output_path)
                     {
                         let latest5files = scan_dir(&source_path, 4);
-                        println!("will export these article into RSS.xml");
+                        info!("will export these article into RSS.xml");
                         let rss_config = RssConfig::new(rss_title, rss_desc, rss_url_base, author);
                         match rss4top5md(
                             &exp_rss_path,
@@ -57,14 +55,14 @@ pub fn exp(book: String) {
                             &output_path,
                             &rss_config,
                         ) {
-                            Ok(_) => println!("\n Export => {:?}\n\n", exp_rss_path.clone()),
-                            Err(e) => println!("Error: {}", e),
+                            Ok(_) => info!("\n Export => {:?}\n\n", exp_rss_path.clone()),
+                            Err(e) => error!("Error: {}", e),
                         }
                     }
                 }
                 None => {
                     // url-base 不存在或不是字符串类型
-                    println!(
+                    warn!(
                         r#"Warning: 
 [rss4mdbook] not config in mdBook's book.toml, please append such as:
 
@@ -76,7 +74,7 @@ pub fn exp(book: String) {
                 }
             }
         }
-        Err(e) => println!("Error: {}", e),
+        Err(e) => error!("Error: {}", e),
     }
 }
 
@@ -140,7 +138,7 @@ fn scan_dir(source: &Path, top_n: usize) -> Vec<PathBuf> {
     // 排序
     file_modified_times.sort_by_key(|(_, time)| *time);
 
-    // 获取最新的5个文件，过滤掉包含 SUMMARY.md 的路径
+    // 获取最新的n个文件，过滤掉包含 SUMMARY.md 的路径
     file_modified_times
         .iter()
         .rev()
@@ -201,7 +199,6 @@ fn rss4top5md(
             .unwrap()
             .to_string_lossy()
             .into_owned();
-        println!("uri and uri4md is {:?}", uri);
         let item = Item {
             title: Some(file_name),
             link: Some(uri),

@@ -1,6 +1,6 @@
 mod inv;
 
 fn main() {
-    //git::cli();
+    env_logger::init();
     inv::run();
 }
