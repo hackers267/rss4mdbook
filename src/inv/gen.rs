@@ -151,13 +151,7 @@ fn scan_dir(source: &Path, top_n: usize, day: Option<usize>) -> Vec<PathBuf> {
                     .to_str()
                     .is_some_and(|v| v.to_lowercase().contains("summary.md"))
             })
-            .filter(|(_, time)| {
-                let modified_time: DateTime<Local> = DateTime::from(*time);
-                let now = Local::now();
-                let duration = now - modified_time;
-                let days = duration.num_days() as usize;
-                days < day
-            })
+            .filter(|(_, time)| latest_days(time, day))
             .map(|(path, _)| path.to_path_buf())
             .collect(),
         None => {
@@ -171,6 +165,15 @@ fn scan_dir(source: &Path, top_n: usize, day: Option<usize>) -> Vec<PathBuf> {
                 .collect()
         }
     }
+}
+
+/// 过滤最近几天的内容
+fn latest_days(time: &std::time::SystemTime, day: usize) -> bool {
+    let modified_time: DateTime<Local> = DateTime::from(*time);
+    let now = Local::now();
+    let duration = now - modified_time;
+    let days = duration.num_days() as usize;
+    days < day
 }
 
 struct RssConfig<'a> {
