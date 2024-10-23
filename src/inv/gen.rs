@@ -46,7 +46,10 @@ pub fn exp(book: String) {
                         (src_path, export_rss_path, output_path)
                     {
                         let latest5files = scan_dir(&source_path, 4);
-                        info!("will export these article into RSS.xml");
+                        info!("Will export these article into RSS.xml");
+                        latest5files
+                            .iter()
+                            .for_each(|path| info!("OUTPUT {}", path.to_str().unwrap_or_default()));
                         let rss_config = RssConfig::new(rss_title, rss_desc, rss_url_base, author);
                         match rss4top5md(
                             &exp_rss_path,
