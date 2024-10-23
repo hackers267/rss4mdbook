@@ -18,9 +18,10 @@ use walkdir::{DirEntry as WalkDirEntry, WalkDir};
     - order pick lated 5
     - export as rss.xml -> u want path
 */
-pub fn exp(book: String) {
+pub fn exp(book: String, limit: Option<usize>, _day: Option<usize>) {
     let pkg_name = option_env!("CARGO_PKG_NAME").unwrap_or("DAMA's Crate");
     let pkg_version = option_env!("CARGO_PKG_VERSION").unwrap_or("0.1.42");
+    let top = limit.unwrap_or(5);
     info!(
         "digging and generating by\n\t~> {} v{} <~",
         pkg_name, pkg_version
@@ -45,16 +46,16 @@ pub fn exp(book: String) {
                     if let (Some(source_path), Some(exp_rss_path), Some(output_path)) =
                         (src_path, export_rss_path, output_path)
                     {
-                        let latest5files = scan_dir(&source_path, 4);
+                        let latest_files = scan_dir(&source_path, top);
                         info!("Will export these article into RSS.xml");
-                        latest5files
+                        latest_files
                             .iter()
                             .for_each(|path| info!("OUTPUT {}", path.to_str().unwrap_or_default()));
                         let rss_config = RssConfig::new(rss_title, rss_desc, rss_url_base, author);
-                        match rss4top5md(
+                        match rss_top(
                             &exp_rss_path,
                             &source_path,
-                            &latest5files,
+                            &latest_files,
                             &output_path,
                             &rss_config,
                         ) {
@@ -169,7 +170,7 @@ impl<'a> RssConfig<'a> {
     }
 }
 
-fn rss4top5md(
+fn rss_top(
     rssfile: &Path,
     source: &Path,
     latest5files: &[PathBuf],
