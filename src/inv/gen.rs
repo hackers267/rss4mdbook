@@ -222,13 +222,9 @@ fn rss_top(
         let date = DateTime::<Local>::from(metadata.modified()?).to_rfc2822();
         let file_path = PathBuf::from(&file);
         let content = pick_content(&file_path, source, output_path)?;
-        let file_name = file_path
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .into_owned();
+        let title = pick_item_title(&file_path, source, output_path)?;
         let item = Item {
-            title: Some(file_name),
+            title: Some(title),
             link: Some(uri),
             description: None,
             author: Some(author.to_string()),
@@ -250,7 +246,36 @@ fn rss_top(
 }
 
 /// 读取内容
+///
+/// # Arguments
+/// - file: 文件路径
+/// - source: mdbook的源目录路径
+/// - output: mdbook的输出目录路径
+///
+/// # Return
+/// 成功则为输出的文件中html中的main标签内容，失败则输出为错误
 fn pick_content(file: &Path, source: &Path, output: &Path) -> Result<String, Box<dyn Error>> {
+    let content = pick_target_content(file, source, output)?;
+    let html = Html::parse_document(&content);
+    let main_selector = Selector::parse("main").unwrap();
+    let main = html.select(&main_selector).next().unwrap().inner_html();
+    Ok(main)
+}
+
+/// 获取目标文件的内容
+///
+/// # Arguments
+/// - file: 文件路径
+/// - source: mdbook的源目录路径
+/// - output: mdbook的输出目录路径
+///
+/// # Return
+/// 成功则为输出的文件内容，失败则输出为错误
+fn pick_target_content(
+    file: &Path,
+    source: &Path,
+    output: &Path,
+) -> Result<String, Box<dyn Error>> {
     let file_path = file.strip_prefix(source).unwrap();
     let mut file_path = output.join(file_path);
     file_path.set_extension("html");
@@ -263,10 +288,23 @@ fn pick_content(file: &Path, source: &Path, output: &Path) -> Result<String, Box
         file_path.set_file_name("index.html")
     }
     let content = fs::read_to_string(&file_path)?;
+    Ok(content)
+}
+/// 读取标题
+///
+/// # Arguments
+/// - file: 文件路径
+/// - source: mdbook的源目录路径
+/// - output: mdbook的输出目录路径
+///
+/// # Return
+/// 成功则为输出的文件中html中的title属性内容，失败则输出为错误
+fn pick_item_title(file: &Path, source: &Path, output: &Path) -> Result<String, Box<dyn Error>> {
+    let content = pick_target_content(file, source, output)?;
     let html = Html::parse_document(&content);
-    let main_selector = Selector::parse("main").unwrap();
-    let main = html.select(&main_selector).next().unwrap().inner_html();
-    Ok(main)
+    let title_selector = Selector::parse("title")?;
+    let title = html.select(&title_selector).next().unwrap().inner_html();
+    Ok(title)
 }
 
 fn site_uri<'a>(path: &'a Path, base: &'a Path) -> String {
